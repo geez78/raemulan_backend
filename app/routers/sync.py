@@ -198,5 +198,36 @@ def _apply_op(db: Session, op: schemas.SyncPushOp, user: models.User) -> None:
         )
         db.add(log)
 
+    elif op.action == "deploy_asset_set":
+        aset = db.get(models.AssetSet, op.record_id)
+        if aset is None:
+            raise ValueError(f"Asset set {op.record_id} not found")
+        now = datetime.now(timezone.utc)
+        location_id = _uuid(payload.get("location_id"))
+        aset.current_location_id = location_id
+        aset.status = "deployed"
+        aset.updated_at = now
+        db.query(models.Asset).filter(models.Asset.set_id == aset.id).update({
+            "current_location_id": location_id,
+            "status": "deployed",
+            "updated_by": _uuid(payload.get("updated_by")) or user.id,
+            "updated_at": now,
+        })
+
+    elif op.action == "pull_out_asset_set":
+        aset = db.get(models.AssetSet, op.record_id)
+        if aset is None:
+            raise ValueError(f"Asset set {op.record_id} not found")
+        now = datetime.now(timezone.utc)
+        aset.current_location_id = None
+        aset.status = "in_storage"
+        aset.updated_at = now
+        db.query(models.Asset).filter(models.Asset.set_id == aset.id).update({
+            "current_location_id": None,
+            "status": "in_storage",
+            "updated_by": _uuid(payload.get("updated_by")) or user.id,
+            "updated_at": now,
+        })
+
     else:
         raise ValueError(f"Unknown sync action: {op.action}")
